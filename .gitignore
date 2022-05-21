@@ -11,3 +11,9 @@ __pycache__/
 # due to using tox and pytest
 .tox
 .cache
+.DS_Store
+.venv/
+minavrfpy/config.py
+
+data/vrf_checked/*
+data/ledgers/*

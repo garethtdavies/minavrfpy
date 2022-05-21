@@ -20,13 +20,15 @@ SLOTS_PER_EPOCH = 7140
 # outcomes
 WON = "WON"
 LOST = "LOST"
+LOST_UNKNOWN = "LOST UNEXPLAINED"
+LOST_WONVRF = "LOST BUT WON VRF"
 
 MISSED_TOO_LATE = "MISSED_TOO_LATE"
 MISSED_HEIGHT_DIFF = "MISSED_HEIGHT_DIFF"
 MISSED_NOT_PRODUCED = "MISSED_NOT_PRODUCED"
 
 FUTURE = "FUTURE"  # not yet time
-DIDNT_HAPPEN = "DIDNT_HAPPEN"  # this case can never happen - need to check again...
+DIDNT_HAPPEN = "LOST_NOT_PRODUCED"  # this happens when noone wins the slot as no vrf winner
 
 
 def get_stakes_df(delegate, ledger_hash, mina_explorer_client):
@@ -76,6 +78,10 @@ def get_my_winner_df(epoch, pk, mina_explorer_client):
     my_winner_df["dateTime"] = pd.to_datetime(my_winner_df["dateTime"])
     my_winner_df["receivedTime"] = pd.to_datetime(my_winner_df["receivedTime"])
     my_winner_df["time_diff"] = my_winner_df.receivedTime - my_winner_df.dateTime
+
+    # Sort so that heighest blocks are first
+    my_winner_df.sort_values('blockHeight', ascending=False, inplace=True)
+
     return my_winner_df
 
 
@@ -274,40 +280,40 @@ def get_epoch_df(epoch, block_producer_key, mina_explorer_client=None):
         global_slot = row["global_slot"]
 
         if row["bp_won"]:
-            return WON
+            return WON # We won the block
 
-        if not row["winner_exists"]:
+        if not row["winner_exists"]: # There was no winner for this slot
             if not row["saw_my_producer"]:
                 if global_slot > max_slot:
-                    return FUTURE
+                    return FUTURE # This block is in the future
                 else:
-                    return DIDNT_HAPPEN
+                    return MISSED_NOT_PRODUCED # We didn't see the block so it wasn't produced
             else:
                 if row["too_late"]:
-                    return MISSED_TOO_LATE
+                    return MISSED_TOO_LATE # It was produced by not received within 3 mins and we didn't win it
                 else:
-                    return LOST
+                    return LOST_UNKNOWN # We saw a block, it wasn't late but no winner for this slot? This would be weird but propogation issues. Investigate more.
 
         winner_slot_vrf = winner_slot_to_vrf[global_slot]
         my_winner_slot_vrf = my_winner_slot_to_vrf[global_slot]
         comp = get_vrf_comp(global_slot, winner_slot_vrf, my_winner_slot_vrf)
 
-        if row["saw_my_producer"]:
-            if row["block_height_equal"]:
+        if row["saw_my_producer"]: # We didn't win the block but we did produced
+            if row["block_height_equal"]: # We produced at the right height
                 if comp:
                     if row["too_late"]:
-                        return MISSED_TOO_LATE
+                        return MISSED_TOO_LATE # We would have won the VRF but received too late
                     else:
-                        return LOST
+                        return LOST_WONVRF # We produced at the right height and wasn't late and we won the VRF so why?
                 else:
-                    return LOST
+                    return LOST # This is the default losing case, everything was good but we just lost VRF
             else:
-                return MISSED_HEIGHT_DIFF
+                return MISSED_HEIGHT_DIFF # We produced but block not at right height
         else:
             if comp:
-                return MISSED_NOT_PRODUCED
+                return MISSED_NOT_PRODUCED # Didn't produce a block but we would have won
             else:
-                return LOST
+                return MISSED_NOT_PRODUCED # Didn't produce a block but we would have lost anyway... potentially we would want to know this?
 
     df["outcome"] = df.apply(lambda row: get_outcome(row), axis=1)
 

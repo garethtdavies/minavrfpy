@@ -24,6 +24,9 @@ setup(
         "pandas==1.3.4",
         "splitstream",
         "MinaClient@git+https://github.com//bakebrain/coda-python-client@query-sgqlc-refactoring",
+        "seaborn",
+        "matplotlib",
+        "blackcellmagic"
     ],
     project_urls={
         "Bug Reports": "https://github.com/bakebrain/minavrfpy/issues",
